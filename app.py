@@ -15,13 +15,10 @@ st.set_page_config(
 # --------------------------------------------------
 @st.cache_data
 def load_data():
-    # Be robust to file name: try corpus.csv, then corpus.csv.csv
-    try:
-        df = pd.read_csv("corpus.csv")
-    except FileNotFoundError:
-        df = pd.read_csv("corpus.csv.csv")
+    # IMPORTANT: filename must match exactly what is in GitHub
+    df = pd.read_csv("corpus.csv.csv")
 
-    # Normalise emotion labels: hide joy, convert it to shock
+    # Normalize emotion labels: convert any 'joy' to 'shock'
     if "emotion_label" in df.columns:
         df["emotion_label"] = df["emotion_label"].astype(str).str.strip()
         df["emotion_label"] = df["emotion_label"].replace({"joy": "shock"})
@@ -55,17 +52,17 @@ working_df = df.copy()
 if focus_fs and "emotion_label" in working_df.columns:
     working_df = working_df[working_df["emotion_label"].isin(["fear", "shock"])]
 
-def multiselect_if(colname, label):
-    """Helper to build a multiselect only if column exists."""
+def multiselect_if(colname: str, label: str):
+    """Create a multiselect only if the column exists."""
     if colname in working_df.columns:
-        opts = sorted(working_df[colname].dropna().unique())
-        return st.sidebar.multiselect(label, opts, default=opts)
+        options = sorted(working_df[colname].dropna().unique())
+        return st.sidebar.multiselect(label, options, default=options)
     return []
 
-selected_emotions    = multiselect_if("emotion_label", "Emotion")
-selected_narratives  = multiselect_if("narrative_type", "Narrative type")
-selected_themes      = multiselect_if("theme_label", "Theme")
-selected_sources     = multiselect_if("source", "Source")
+selected_emotions   = multiselect_if("emotion_label", "Emotion")
+selected_narratives = multiselect_if("narrative_type", "Narrative type")
+selected_themes     = multiselect_if("theme_label", "Theme")
+selected_sources    = multiselect_if("source", "Source")
 
 # --------------------------------------------------
 # Apply filters
@@ -89,20 +86,24 @@ if selected_sources and "source" in filtered.columns:
 # --------------------------------------------------
 st.subheader("📊 Summary")
 
-c1, c2, c3 = st.columns(3)
+col1, col2, col3 = st.columns(3)
 
-with c1:
+with col1:
     st.metric("Total records (filtered)", len(filtered))
 
-with c2:
-    art_count = filtered["article_id"].nunique() if "article_id" in filtered.columns else 0
-    st.metric("Unique articles", art_count)
+with col2:
+    article_count = (
+        filtered["article_id"].nunique()
+        if "article_id" in filtered.columns
+        else 0
+    )
+    st.metric("Unique articles", article_count)
 
-with c3:
+with col3:
     if "date_published" in filtered.columns and not filtered["date_published"].isna().all():
-        min_d = filtered["date_published"].min().date()
-        max_d = filtered["date_published"].max().date()
-        st.metric("Date range", f"{min_d} → {max_d}")
+        min_date = filtered["date_published"].min().date()
+        max_date = filtered["date_published"].max().date()
+        st.metric("Date range", f"{min_date} → {max_date}")
     else:
         st.metric("Date range", "N/A")
 
@@ -137,13 +138,15 @@ with tab_overview:
             )
             .properties(height=350)
         )
+
         st.altair_chart(emo_chart, use_container_width=True)
     else:
         st.info("No emotion data for current filters.")
 
-    # Optional: top themes
+    # Optional: top themes chart
     if "theme_label" in filtered.columns and not filtered.empty:
         st.markdown("### Top themes")
+
         theme_counts = (
             filtered["theme_label"]
             .value_counts()
@@ -162,6 +165,7 @@ with tab_overview:
             )
             .properties(height=300)
         )
+
         st.altair_chart(theme_chart, use_container_width=True)
 
 # ----------------- Timeline tab -------------------
@@ -169,17 +173,20 @@ with tab_timeline:
     st.markdown("### Narratives over time")
 
     if "date_published" in filtered.columns:
-        tdf = filtered.dropna(subset=["date_published"]).copy()
-        if not tdf.empty:
-            grp = (
-                tdf
-                .groupby([pd.Grouper(key="date_published", freq="M"), "emotion_label"])
+        time_df = filtered.dropna(subset=["date_published"]).copy()
+        if not time_df.empty:
+            grouped = (
+                time_df
+                .groupby([
+                    pd.Grouper(key="date_published", freq="M"),
+                    "emotion_label",
+                ])
                 .size()
                 .reset_index(name="count")
             )
 
             time_chart = (
-                alt.Chart(grp)
+                alt.Chart(grouped)
                 .mark_line(point=True)
                 .encode(
                     x=alt.X("date_published:T", title="Month"),
@@ -189,6 +196,7 @@ with tab_timeline:
                 )
                 .properties(height=350)
             )
+
             st.altair_chart(time_chart, use_container_width=True)
         else:
             st.info("No valid dates after filtering.")
@@ -199,7 +207,7 @@ with tab_timeline:
 with tab_data:
     st.markdown("### Filtered records")
 
-    cols = [
+    columns_to_show = [
         "id",
         "article_id",
         "title",
@@ -211,9 +219,9 @@ with tab_data:
         "text_excerpt",
         "url",
     ]
-    cols = [c for c in cols if c in filtered.columns]
+    columns_to_show = [c for c in columns_to_show if c in filtered.columns]
 
-    st.dataframe(filtered[cols], use_container_width=True)
+    st.dataframe(filtered[columns_to_show], use_container_width=True)
 
 st.markdown("---")
 st.caption("Dashboard: Witness Archive – ICE Raids in Chicago.")
