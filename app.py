@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
 
 # --------------------------------------------------
 # Page config
@@ -15,7 +14,7 @@ st.set_page_config(
 # --------------------------------------------------
 @st.cache_data
 def load_data():
-    # IMPORTANT: filename must match exactly what is in GitHub
+    # IMPORTANT: filename must match what is in the repo
     df = pd.read_csv("corpus.csv.csv")
 
     # Normalize emotion labels: convert any 'joy' to 'shock'
@@ -45,7 +44,7 @@ st.markdown("---")
 # --------------------------------------------------
 st.sidebar.title("Filters")
 
-# Optional focus only fear & shock
+# Optional: focus only fear & shock
 focus_fs = st.sidebar.checkbox("Focus only on fear & shock", value=False)
 
 working_df = df.copy()
@@ -121,52 +120,18 @@ with tab_overview:
     st.markdown("### Emotion distribution")
 
     if "emotion_label" in filtered.columns and not filtered.empty:
-        emo_counts = (
-            filtered["emotion_label"]
-            .value_counts()
-            .reset_index()
-            .rename(columns={"index": "emotion_label", "emotion_label": "count"})
-        )
-
-        emo_chart = (
-            alt.Chart(emo_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X("emotion_label:N", title="Emotion"),
-                y=alt.Y("count:Q", title="Count"),
-                tooltip=["emotion_label", "count"],
-            )
-            .properties(height=350)
-        )
-
-        st.altair_chart(emo_chart, use_container_width=True)
+        emo_counts = filtered["emotion_label"].value_counts().sort_index()
+        st.bar_chart(emo_counts)
     else:
         st.info("No emotion data for current filters.")
 
-    # Optional: top themes chart
+    # Optional: top themes
     if "theme_label" in filtered.columns and not filtered.empty:
         st.markdown("### Top themes")
-
-        theme_counts = (
-            filtered["theme_label"]
-            .value_counts()
-            .head(10)
-            .reset_index()
-            .rename(columns={"index": "theme_label", "theme_label": "count"})
-        )
-
-        theme_chart = (
-            alt.Chart(theme_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X("count:Q", title="Count"),
-                y=alt.Y("theme_label:N", title="Theme", sort="-x"),
-                tooltip=["theme_label", "count"],
-            )
-            .properties(height=300)
-        )
-
-        st.altair_chart(theme_chart, use_container_width=True)
+        theme_counts = filtered["theme_label"].value_counts().head(10)
+        st.bar_chart(theme_counts)
+    else:
+        st.info("No theme data for current filters.")
 
 # ----------------- Timeline tab -------------------
 with tab_timeline:
@@ -175,29 +140,23 @@ with tab_timeline:
     if "date_published" in filtered.columns:
         time_df = filtered.dropna(subset=["date_published"]).copy()
         if not time_df.empty:
-            grouped = (
+            # Group by month and emotion
+            time_df["month"] = time_df["date_published"].dt.to_period("M").dt.to_timestamp()
+            timeline = (
                 time_df
-                .groupby([
-                    pd.Grouper(key="date_published", freq="M"),
-                    "emotion_label",
-                ])
+                .groupby(["month", "emotion_label"])
                 .size()
                 .reset_index(name="count")
             )
 
-            time_chart = (
-                alt.Chart(grouped)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("date_published:T", title="Month"),
-                    y=alt.Y("count:Q", title="Number of records"),
-                    color=alt.Color("emotion_label:N", title="Emotion"),
-                    tooltip=["date_published:T", "emotion_label:N", "count:Q"],
-                )
-                .properties(height=350)
-            )
+            # Pivot so each emotion is a separate line
+            pivot = timeline.pivot(
+                index="month",
+                columns="emotion_label",
+                values="count"
+            ).fillna(0).sort_index()
 
-            st.altair_chart(time_chart, use_container_width=True)
+            st.line_chart(pivot)
         else:
             st.info("No valid dates after filtering.")
     else:
