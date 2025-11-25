@@ -14,10 +14,10 @@ st.set_page_config(
 # --------------------------------------------------
 @st.cache_data
 def load_data():
-    # IMPORTANT: filename must match what is in the repo
+    # IMPORTANT: filename must match your GitHub file
     df = pd.read_csv("corpus.csv.csv")
 
-    # Normalize emotion labels: convert any 'joy' to 'shock'
+    # Normalize emotion labels: joy -> shock
     if "emotion_label" in df.columns:
         df["emotion_label"] = df["emotion_label"].astype(str).str.strip()
         df["emotion_label"] = df["emotion_label"].replace({"joy": "shock"})
@@ -125,9 +125,8 @@ with tab_overview:
     else:
         st.info("No emotion data for current filters.")
 
-    # Optional: top themes
+    st.markdown("### Top themes")
     if "theme_label" in filtered.columns and not filtered.empty:
-        st.markdown("### Top themes")
         theme_counts = filtered["theme_label"].value_counts().head(10)
         st.bar_chart(theme_counts)
     else:
