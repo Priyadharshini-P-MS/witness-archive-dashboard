@@ -15,9 +15,13 @@ st.set_page_config(
 # --------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("corpus.csv.csv")
+    # Be robust to file name: try corpus.csv, then corpus.csv.csv
+    try:
+        df = pd.read_csv("corpus.csv")
+    except FileNotFoundError:
+        df = pd.read_csv("corpus.csv.csv")
 
-    # ---- IMPORTANT: hide joy, turn it into shock ----
+    # Normalise emotion labels: hide joy, convert it to shock
     if "emotion_label" in df.columns:
         df["emotion_label"] = df["emotion_label"].astype(str).str.strip()
         df["emotion_label"] = df["emotion_label"].replace({"joy": "shock"})
@@ -52,30 +56,39 @@ if focus_fs and "emotion_label" in working_df.columns:
     working_df = working_df[working_df["emotion_label"].isin(["fear", "shock"])]
 
 def multiselect_if(colname, label):
+    """Helper to build a multiselect only if column exists."""
     if colname in working_df.columns:
         opts = sorted(working_df[colname].dropna().unique())
         return st.sidebar.multiselect(label, opts, default=opts)
     return []
 
-emotions = multiselect_if("emotion_label", "Emotion")
-narratives = multiselect_if("narrative_type", "Narrative type")
-themes = multiselect_if("theme_label", "Theme")
-sources = multiselect_if("source", "Source")
+selected_emotions    = multiselect_if("emotion_label", "Emotion")
+selected_narratives  = multiselect_if("narrative_type", "Narrative type")
+selected_themes      = multiselect_if("theme_label", "Theme")
+selected_sources     = multiselect_if("source", "Source")
 
+# --------------------------------------------------
+# Apply filters
+# --------------------------------------------------
 filtered = working_df.copy()
-if emotions and "emotion_label" in filtered.columns:
-    filtered = filtered[filtered["emotion_label"].isin(emotions)]
-if narratives and "narrative_type" in filtered.columns:
-    filtered = filtered[filtered["narrative_type"].isin(narratives)]
-if themes and "theme_label" in filtered.columns:
-    filtered = filtered[filtered["theme_label"].isin(themes)]
-if sources and "source" in filtered.columns:
-    filtered = filtered[filtered["source"].isin(sources)]
+
+if selected_emotions and "emotion_label" in filtered.columns:
+    filtered = filtered[filtered["emotion_label"].isin(selected_emotions)]
+
+if selected_narratives and "narrative_type" in filtered.columns:
+    filtered = filtered[filtered["narrative_type"].isin(selected_narratives)]
+
+if selected_themes and "theme_label" in filtered.columns:
+    filtered = filtered[filtered["theme_label"].isin(selected_themes)]
+
+if selected_sources and "source" in filtered.columns:
+    filtered = filtered[filtered["source"].isin(selected_sources)]
 
 # --------------------------------------------------
 # Summary metrics
 # --------------------------------------------------
 st.subheader("📊 Summary")
+
 c1, c2, c3 = st.columns(3)
 
 with c1:
@@ -96,7 +109,7 @@ with c3:
 st.markdown("---")
 
 # --------------------------------------------------
-# Tabs
+# Tabs: Overview | Timeline | Data
 # --------------------------------------------------
 tab_overview, tab_timeline, tab_data = st.tabs(
     ["📈 Overview", "📅 Timeline", "📑 Data table"]
@@ -104,7 +117,7 @@ tab_overview, tab_timeline, tab_data = st.tabs(
 
 # ----------------- Overview tab --------------------
 with tab_overview:
-    st.markdown("### Emotion Distribution")
+    st.markdown("### Emotion distribution")
 
     if "emotion_label" in filtered.columns and not filtered.empty:
         emo_counts = (
@@ -119,7 +132,7 @@ with tab_overview:
             .mark_bar()
             .encode(
                 x=alt.X("emotion_label:N", title="Emotion"),
-                y=alt.Y("count:Q", title="count"),
+                y=alt.Y("count:Q", title="Count"),
                 tooltip=["emotion_label", "count"],
             )
             .properties(height=350)
@@ -128,6 +141,7 @@ with tab_overview:
     else:
         st.info("No emotion data for current filters.")
 
+    # Optional: top themes
     if "theme_label" in filtered.columns and not filtered.empty:
         st.markdown("### Top themes")
         theme_counts = (
@@ -179,7 +193,7 @@ with tab_timeline:
         else:
             st.info("No valid dates after filtering.")
     else:
-        st.info("Column `date_published` not found.")
+        st.info("Column `date_published` not found in data.")
 
 # ----------------- Data tab -----------------------
 with tab_data:
