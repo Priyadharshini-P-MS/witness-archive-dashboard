@@ -1,28 +1,24 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
 
-# --------------------------------------------------
-# Page config
-# --------------------------------------------------
 st.set_page_config(
     page_title="Witness Archive – ICE Raids in Chicago",
     layout="wide"
 )
 
-# --------------------------------------------------
-# Load data
-# --------------------------------------------------
-@st.cache_data
+# -----------------------------
+# Load data (very simple)
+# -----------------------------
 def load_data():
+    # Make sure this EXACT file exists in the repo root
     df = pd.read_csv("corpus.csv.csv")
 
-    # Normalize emotion labels: convert any 'joy' to 'shock'
+    # Normalize emotion labels just in case
     if "emotion_label" in df.columns:
         df["emotion_label"] = df["emotion_label"].replace({"joy": "shock"})
-        df["emotion_label"] = df["emotion_label"].str.strip()
+        df["emotion_label"] = df["emotion_label"].astype(str).str.strip()
 
-    # Parse date_published as datetime if present
+    # Parse date_published if present
     if "date_published" in df.columns:
         df["date_published"] = pd.to_datetime(
             df["date_published"], errors="coerce"
@@ -33,237 +29,86 @@ def load_data():
 
 df = load_data()
 
-# --------------------------------------------------
-# Header
-# --------------------------------------------------
+# -----------------------------
+# Title
+# -----------------------------
 st.title("📂 Witness Archive – ICE Raids in Chicago Dashboard")
-
 st.markdown("---")
 
-# --------------------------------------------------
-# Sidebar – filters
-# --------------------------------------------------
-st.sidebar.title("Filters")
-
-# Optional focus on only fear & shock
-focus_fs = st.sidebar.checkbox(
-    "Focus only on fear & shock", value=False
-)
-
-working_df = df.copy()
-
-if focus_fs and "emotion_label" in working_df.columns:
-    working_df = working_df[working_df["emotion_label"].isin(["fear", "shock"])]
+# -----------------------------
+# Sidebar filters (simple)
+# -----------------------------
+st.sidebar.header("Filters")
 
 # Emotion filter
-if "emotion_label" in working_df.columns:
-    emotion_options = sorted(working_df["emotion_label"].dropna().unique())
+if "emotion_label" in df.columns:
+    emo_options = sorted(df["emotion_label"].dropna().unique())
+    selected_emo = st.sidebar.multiselect(
+        "Emotion",
+        options=emo_options,
+        default=emo_options,
+    )
 else:
-    emotion_options = []
-
-selected_emotions = st.sidebar.multiselect(
-    "Emotion",
-    options=emotion_options,
-    default=emotion_options,
-)
-
-# Narrative type filter
-if "narrative_type" in working_df.columns:
-    narrative_options = sorted(working_df["narrative_type"].dropna().unique())
-else:
-    narrative_options = []
-
-selected_narratives = st.sidebar.multiselect(
-    "Narrative type",
-    options=narrative_options,
-    default=narrative_options,
-)
-
-# Theme filter
-if "theme_label" in working_df.columns:
-    theme_options = sorted(working_df["theme_label"].dropna().unique())
-else:
-    theme_options = []
-
-selected_themes = st.sidebar.multiselect(
-    "Theme",
-    options=theme_options,
-    default=theme_options,
-)
+    selected_emo = []
 
 # Source filter
-if "source" in working_df.columns:
-    source_options = sorted(working_df["source"].dropna().unique())
+if "source" in df.columns:
+    src_options = sorted(df["source"].dropna().unique())
+    selected_src = st.sidebar.multiselect(
+        "Source",
+        options=src_options,
+        default=src_options,
+    )
 else:
-    source_options = []
+    selected_src = []
 
-selected_sources = st.sidebar.multiselect(
-    "Source",
-    options=source_options,
-    default=source_options,
-)
+# Apply filters
+filtered = df.copy()
 
-# --------------------------------------------------
-# Apply filters to working_df
-# --------------------------------------------------
-filtered_df = working_df.copy()
+if selected_emo and "emotion_label" in filtered.columns:
+    filtered = filtered[filtered["emotion_label"].isin(selected_emo)]
 
-if selected_emotions and "emotion_label" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["emotion_label"].isin(selected_emotions)]
+if selected_src and "source" in filtered.columns:
+    filtered = filtered[filtered["source"].isin(selected_src)]
 
-if selected_narratives and "narrative_type" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["narrative_type"].isin(selected_narratives)]
-
-if selected_themes and "theme_label" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["theme_label"].isin(selected_themes)]
-
-if selected_sources and "source" in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df["source"].isin(selected_sources)]
-
-# --------------------------------------------------
-# Top summary – simple, clean metrics
-# --------------------------------------------------
+# -----------------------------
+# Summary
+# -----------------------------
 st.subheader("📊 Summary")
 
-c1, c2, c3 = st.columns(3)
+col1, col2 = st.columns(2)
 
-with c1:
-    st.metric("Total records (filtered)", len(filtered_df))
+with col1:
+    st.metric("Total records (filtered)", len(filtered))
 
-with c2:
-    unique_articles = (
-        filtered_df["article_id"].nunique()
-        if "article_id" in filtered_df.columns
-        else 0
-    )
-    st.metric("Unique articles", unique_articles)
-
-with c3:
-    if "date_published" in filtered_df.columns and not filtered_df["date_published"].isna().all():
-        min_date = filtered_df["date_published"].min()
-        max_date = filtered_df["date_published"].max()
-        st.metric("Date range",
-                  f"{min_date.date()} → {max_date.date()}")
+with col2:
+    if "emotion_label" in filtered.columns and not filtered.empty:
+        st.write("Emotion distribution:")
+        st.bar_chart(filtered["emotion_label"].value_counts())
     else:
-        st.metric("Date range", "N/A")
+        st.write("No emotion data.")
 
 st.markdown("---")
 
-# --------------------------------------------------
-# Tabs: Overview | Timeline | Data
-# --------------------------------------------------
-tab_overview, tab_timeline, tab_data = st.tabs(
-    ["📈 Overview", "📅 Timeline", "📑 Data table"]
-)
+# -----------------------------
+# Table
+# -----------------------------
+st.subheader("📑 Filtered data")
 
-# ----------------- Overview tab --------------------
-with tab_overview:
-    st.markdown("### Emotion distribution")
+show_cols = [
+    "id",
+    "article_id",
+    "title",
+    "date_published",
+    "source",
+    "emotion_label",
+    "theme_label",
+    "narrative_type",
+    "text_excerpt",
+    "url",
+]
+show_cols = [c for c in show_cols if c in filtered.columns]
 
-    if "emotion_label" in filtered_df.columns and not filtered_df.empty:
-        emo_counts = (
-            filtered_df["emotion_label"]
-            .value_counts()
-            .reset_index()
-            .rename(columns={"index": "emotion_label", "emotion_label": "count"})
-        )
+st.dataframe(filtered[show_cols], use_container_width=True)
 
-        emo_chart = (
-            alt.Chart(emo_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X("emotion_label:N", title="Emotion"),
-                y=alt.Y("count:Q", title="Count"),
-                tooltip=["emotion_label", "count"],
-            )
-            .properties(height=300)
-        )
-        st.altair_chart(emo_chart, use_container_width=True)
-    else:
-        st.info("No emotion data available for the current filters.")
-
-    # Optional: top themes
-    if "theme_label" in filtered_df.columns and not filtered_df.empty:
-        st.markdown("### Top themes")
-        theme_counts = (
-            filtered_df["theme_label"]
-            .value_counts()
-            .head(10)
-            .reset_index()
-            .rename(columns={"index": "theme_label", "theme_label": "count"})
-        )
-
-        theme_chart = (
-            alt.Chart(theme_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X("count:Q", title="Count"),
-                y=alt.Y("theme_label:N", title="Theme", sort="-x"),
-                tooltip=["theme_label", "count"],
-            )
-            .properties(height=300)
-        )
-        st.altair_chart(theme_chart, use_container_width=True)
-
-# ----------------- Timeline tab --------------------
-with tab_timeline:
-    st.markdown("### Narratives over time")
-
-    if "date_published" in filtered_df.columns:
-        time_df = filtered_df.dropna(subset=["date_published"]).copy()
-        if not time_df.empty:
-            time_group = (
-                time_df
-                .groupby(
-                    [pd.Grouper(key="date_published", freq="M"), "emotion_label"],
-                    dropna=True,
-                )
-                .size()
-                .reset_index(name="count")
-            )
-
-            time_chart = (
-                alt.Chart(time_group)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("date_published:T", title="Month"),
-                    y=alt.Y("count:Q", title="Number of records"),
-                    color=alt.Color("emotion_label:N", title="Emotion"),
-                    tooltip=["date_published:T", "emotion_label:N", "count:Q"],
-                )
-                .properties(height=350)
-            )
-
-            st.altair_chart(time_chart, use_container_width=True)
-        else:
-            st.info("No valid dates available after filters.")
-    else:
-        st.info("Column `date_published` not found in the data.")
-
-# ----------------- Data tab ------------------------
-with tab_data:
-    st.markdown("### Filtered records")
-
-    show_cols = [
-        col
-        for col in [
-            "id",
-            "article_id",
-            "title",
-            "date_published",
-            "source",
-            "emotion_label",
-            "theme_label",
-            "narrative_type",
-            "text_excerpt",
-            "url",
-        ]
-        if col in filtered_df.columns
-    ]
-
-    st.dataframe(filtered_df[show_cols], use_container_width=True)
-
-st.markdown("---")
-st.caption(
-    "Dashboard: Witness Archive – ICE Raids in Chicago."
-)
+st.caption("Dashboard: Witness Archive – ICE Raids in Chicago.")
