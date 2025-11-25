@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
 st.set_page_config(page_title="Witness Archive Dashboard", layout="wide")
 
@@ -8,10 +7,12 @@ st.set_page_config(page_title="Witness Archive Dashboard", layout="wide")
 def load_data():
     df = pd.read_csv("corpus.csv.csv")
 
+    # Replace joy -> shock
     if "emotion_label" in df.columns:
         df["emotion_label"] = df["emotion_label"].astype(str).str.strip()
         df["emotion_label"] = df["emotion_label"].replace({"joy": "shock"})
 
+    # Convert date
     if "date_published" in df.columns:
         df["date_published"] = pd.to_datetime(df["date_published"], errors="coerce")
 
@@ -19,10 +20,11 @@ def load_data():
 
 df = load_data()
 
+# ---------- UI ----------
 st.title("📂 Witness Archive – ICE Raids in Chicago Dashboard")
 st.markdown("---")
 
-# Sidebar filters
+# ---------- Sidebar Filters ----------
 st.sidebar.header("Filters")
 
 emotions = sorted(df["emotion_label"].dropna().unique()) if "emotion_label" in df else []
@@ -38,31 +40,32 @@ if selected_emotions:
 if selected_sources:
     filtered = filtered[filtered["source"].isin(selected_sources)]
 
-# Summary section
+# ---------- Summary ----------
 st.subheader("📊 Summary")
+
 col1, col2 = st.columns(2)
 
 with col1:
     st.metric("Total records", len(filtered))
 
 with col2:
-    st.write("Emotion distribution (horizontal chart)")
+    st.write("Emotion distribution (vertical)")
+    emo_counts = filtered["emotion_label"].value_counts().sort_index()
+    st.bar_chart(emo_counts)
 
-    emo_counts = (
-        filtered["emotion_label"]
-        .value_counts()
-        .reset_index()
-        .rename(columns={"index": "emotion", "emotion_label": "count"})
-    )
+st.markdown("---")
 
-    fig = px.bar(
-        emo_counts,
-        x="count",
-        y="emotion",
-        orientation="h",
-        title="Emotion distribution",
-        color="emotion",
-        color_discrete_sequence=px.colors.qualitative.Set2,
-    )
+# ---------- Data ----------
+st.subheader("📑 Filtered Data")
 
-    st.plotly_chart(fig, use_container_width_
+cols = [
+    "id", "article_id", "title", "date_published", "source",
+    "emotion_label", "theme_label", "narrative_type",
+    "text_excerpt", "url"
+]
+cols = [c for c in cols if c in filtered.columns]
+
+st.dataframe(filtered[cols], use_container_width=True)
+
+st.markdown("---")
+st.caption("Dashboard: Witness Archive – ICE Raids in Chicago.")
